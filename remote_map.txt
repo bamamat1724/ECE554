@@ -1,0 +1,11 @@
+backward - rewind 10 seconds
+down - volume down
+forward - fast forward 30 seconds 
+go - play
+left - prev episode
+marvin - activate voice commands
+right - next episode
+stop - pause
+up - volume up
+wow - random episode
+zero - restart episode
