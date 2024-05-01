@@ -21,10 +21,7 @@ def play_audio(filename=None, data=None, sample_rate=None):
 
 
 def read_audio(filename, dst_sample_rate=16000, PRINT=False):
-    if 0:  # This takes 0.4 seconds to read an audio of 1 second. But support for more format
-        data, sample_rate = librosa.load(filename)
-    else:  # This only takes 0.01 seconds
-        data, sample_rate = sf.read(filename)
+    data, sample_rate = sf.read(filename)
 
     assert len(data.shape) == 1, "This project only support 1 dim audio."
 

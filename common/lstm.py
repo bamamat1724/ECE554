@@ -10,6 +10,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))+"/../" # root of the project
 sys.path.append(ROOT)
 
 import common.util as util
+import common.lstm as lstm
 
 def set_default_args():
     
@@ -18,8 +19,8 @@ def set_default_args():
     # model params
     args.input_size = 12  # == n_mfcc
     args.batch_size = 1
-    args.hidden_size = 32
-    args.num_layers = 2
+    args.hidden_size = 64
+    args.num_layers = 4
 
     # training params
     args.num_epochs = 100
@@ -40,7 +41,7 @@ def set_default_args():
     args.do_data_augment = False
 
     # labels
-    args.classes_txt = "config/classes.names" 
+    args.classes_txt = "labels/classes_kaggle.names"
     args.num_classes = None # should be added with a value somewhere, like this:
 
     # log setting
@@ -140,8 +141,7 @@ class RNN(nn.Module):
         return label
 
     def predict_audio_label_index(self, audio):
-        audio.compute_mfcc()
-        x = audio.mfcc.T # (time_len, feature_dimension)
+        x = audio.T # (time_len, feature_dimension)
         idx = self.predict(x)
         return idx
     
@@ -180,9 +180,69 @@ def fix_weights_except_fc(model):
             param.requires_grad = False
     print("")
 
+
+class TrainingLog(object):
+    def __init__(self,
+                 training_args=None,  # arguments in training
+                 #  MAX_EPOCH = 1000,
+                 ):
+
+        if not isinstance(training_args, dict):
+            training_args = training_args.__dict__
+        self.training_args = training_args
+
+        self.epochs = []
+        self.accus_train = []
+        self.accus_eval = []
+        self.accus_test = []
+
+    def store_accuracy(self, epoch, train=-0.1, eval=-0.1, test=-0.1):
+        self.epochs.append(epoch)
+        self.accus_train.append(train)
+        self.accus_eval.append(eval)
+        self.accus_test.append(test)
+        # self.accu_table[epoch] = self.AccuItems(train, eval, test)
+
+    def plot_train_eval_accuracy(self):
+        plt.cla()
+        t = self.epochs
+        plt.plot(t, self.accus_train, 'r.-', label="train")
+        plt.plot(t, self.accus_eval, 'b.-', label="eval")
+        plt.title("Accuracy on train/eval dataset")
+        plt.xlabel("epoch")
+        plt.ylabel("accuracy")
+
+        # lim
+        # plt.ylim([0.2, 1.05])
+        plt.legend(loc='upper left')
+
+    def save_log(self, filename):
+        with open(filename, 'w') as f:
+
+            # -- Args
+            f.write("Args:" + "\n")
+            for key, val in self.training_args.items():
+                s = "\t{:<20}: {}".format(key, val)
+                f.write(s + "\n")
+            f.write("\n"
+                    )
+            # -- Accuracies
+            f.write("Accuracies:" + "\n")
+            f.write("\t{:<10}{:<10}{:<10}{:<10}\n".format(
+                "Epoch", "Train", "Eval", "Test"))
+
+            for i in range(len(self.epochs)):
+                epoch = self.epochs[i]
+                train = self.accus_train[i]
+                eval = self.accus_eval[i]
+                test = self.accus_test[i]
+                f.write("\t{:<10}{:<10.3f}{:<10.3f}{:<10.3f}\n".format(
+                    epoch, train, eval, test))
+
 def train_model(model, args, train_loader, eval_loader):
 
     device = model.device
+    logger = TrainingLog(training_args=args)
     if args.finetune_model:
         fix_weights_except_fc(model)
         
@@ -255,6 +315,10 @@ def train_model(model, args, train_loader, eval_loader):
                 name_to_save = args.save_model_to + "/" + "{:03d}".format(epoch) + ".ckpt"
                 torch.save(model.state_dict(), name_to_save)
                 print("Save model to: ", name_to_save)
+
+            # logger record
+            logger.store_accuracy(epoch, train=train_accu, eval=eval_accu)
+            logger.save_log(args.save_log_to)
 
             if args.plot_accu and epoch == 1:
                 plt.figure(figsize=(10, 8))
